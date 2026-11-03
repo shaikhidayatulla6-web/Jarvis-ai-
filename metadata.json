@@ -1,0 +1,6 @@
+{
+  "name": "JARVIS — Personal Android AI Assistant",
+  "description": "Futuristic native Android personal AI assistant in Kotlin & Jetpack Compose with dual-provider Gemini AI failover, voice control, app launcher, WhatsApp message preparation, task reminders, and daily planner.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

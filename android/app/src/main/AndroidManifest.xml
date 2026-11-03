@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.jarvis.assistant">
+
+    <!-- Network access for Gemini / Secondary AI Provider Gateway -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Voice input via SpeechRecognizer (Push-to-Talk default) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Task reminders & notifications -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Optional contact lookup strictly when user chooses contact-based WhatsApp messaging -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <!-- Optional Wake-Word Foreground Service permissions (Android 14+ compliant) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
+    <!-- Explicit Package Visibility Allowlist (No broad QUERY_ALL_PACKAGES permission) -->
+    <queries>
+        <package android:name="com.instagram.android" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.android.chrome" />
+        <package android:name="com.android.settings" />
+
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:label="JARVIS"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Exact Alarm & Notification Action Receiver (Complete / Snooze) -->
+        <receiver
+            android:name=".data.ReminderAlarmReceiver"
+            android:exported="false" />
+
+        <!-- Reboot Restoration Receiver to reschedule active reminders after phone restart -->
+        <receiver
+            android:name=".data.BootRestoreReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Optional Wake-Word Foreground Service with persistent notification and Stop action -->
+        <service
+            android:name=".voice.VoiceWakeWordForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+    </application>
+</manifest>
