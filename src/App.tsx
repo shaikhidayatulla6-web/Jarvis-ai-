@@ -12,6 +12,7 @@ import {
   Palette,
   Radio,
   Send,
+  Smartphone,
   Sparkles,
   Terminal,
   Trash2,
@@ -1900,7 +1901,7 @@ export default function App() {
               { id: 'assistant', label: 'Command Center' },
               { id: 'voice-calibration', label: 'Voice Profile & Calibration' },
               { id: 'providers', label: 'Providers & Settings' },
-              { id: 'android', label: 'Android Kotlin Code' },
+              { id: 'android', label: 'Android APK & Releases' },
             ] as const
           ).map((navItem) => (
             <button
@@ -1919,8 +1920,18 @@ export default function App() {
           ))}
         </nav>
 
-        {/* Zone 3: Separate "Tap to Talk" and "Hey JARVIS" Controls */}
+        {/* Zone 3: Separate "Tap to Talk", "Hey JARVIS", and Direct APK Download Controls */}
         <div className="flex items-center gap-2 shrink-0">
+          <a
+            href="/api/android/download-apk?variant=release"
+            download="JARVIS-AI-Assistant-v2.0.0.apk"
+            data-testid="header-download-apk-btn"
+            className="hidden sm:flex min-h-[40px] items-center gap-1.5 rounded-xl border border-amber-400/50 bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/25 whitespace-nowrap shrink-0"
+          >
+            <Smartphone className="h-3.5 w-3.5 text-amber-300" />
+            Download APK
+          </a>
+
           <button
             type="button"
             data-testid="header-tap-to-talk-btn"
@@ -1958,7 +1969,7 @@ export default function App() {
             { id: 'assistant', label: 'Command Center' },
             { id: 'voice-calibration', label: 'Voice Profile' },
             { id: 'providers', label: 'Providers' },
-            { id: 'android', label: 'Kotlin Code' },
+            { id: 'android', label: 'APK & Releases' },
           ] as const
         ).map((item) => (
           <button

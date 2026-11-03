@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import crypto from 'node:crypto';
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -779,7 +780,12 @@ async function startServer() {
 
   // 5. Serve real Kotlin Android source files from /android/... on disk
   app.get('/api/android-source', (_req, res) => {
-    const files = ANDROID_FILES_LIST.map((relPath) => {
+    const extraFiles = [
+      ...ANDROID_FILES_LIST,
+      '/android/gradle.properties',
+      '/.github/workflows/build-and-release-apk.yml',
+    ];
+    const files = extraFiles.map((relPath) => {
       const absPath = path.join(__dirname, relPath);
       let content = '';
       try {
@@ -794,6 +800,266 @@ async function startServer() {
       };
     });
     res.json({ files });
+  });
+
+  // 6. Serve compiled JARVIS 2.0 Android APK status, direct binary download, and GitHub Releases publisher
+  const RELEASE_APK_REL = '/public/releases/JARVIS-AI-Assistant-v2.0.0.apk';
+  const DEBUG_APK_REL = '/public/releases/JARVIS-AI-Assistant-Debug.apk';
+
+  function getApkMetadata(relPath: string, fileName: string, variant: 'release' | 'debug') {
+    const absPath = path.join(__dirname, relPath);
+    try {
+      const stat = fs.statSync(absPath);
+      const buf = fs.readFileSync(absPath);
+      const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
+      return {
+        available: true,
+        variant,
+        fileName,
+        sizeBytes: stat.size,
+        sizeFormatted: `${(stat.size / (1024 * 1024)).toFixed(2)} MB`,
+        sha256,
+        builtAt: stat.mtime.toISOString(),
+        downloadUrl: `/api/android/download-apk?variant=${variant}`,
+      };
+    } catch {
+      return {
+        available: false,
+        variant,
+        fileName,
+        sizeBytes: 0,
+        sizeFormatted: '0 MB',
+        sha256: null,
+        builtAt: null,
+        downloadUrl: `/api/android/download-apk?variant=${variant}`,
+      };
+    }
+  }
+
+  app.get('/api/android/apk-status', (_req, res) => {
+    const releaseApk = getApkMetadata(
+      RELEASE_APK_REL,
+      'JARVIS-AI-Assistant-v2.0.0.apk',
+      'release'
+    );
+    const debugApk = getApkMetadata(
+      DEBUG_APK_REL,
+      'JARVIS-AI-Assistant-Debug.apk',
+      'debug'
+    );
+    res.json({
+      packageName: 'com.jarvis.assistant',
+      versionName: '2.0.0-gemini',
+      versionCode: 2,
+      minSdk: 26,
+      targetSdk: 35,
+      defaultRepo: 'shaikhidayatulla6-web/Jarvis-ai-',
+      releaseApk,
+      debugApk,
+    });
+  });
+
+  app.get('/api/android/download-apk', (req, res) => {
+    const variant = req.query.variant === 'debug' ? 'debug' : 'release';
+    const relPath = variant === 'debug' ? DEBUG_APK_REL : RELEASE_APK_REL;
+    const fileName =
+      variant === 'debug'
+        ? 'JARVIS-AI-Assistant-Debug.apk'
+        : 'JARVIS-AI-Assistant-v2.0.0.apk';
+    const absPath = path.join(__dirname, relPath);
+
+    if (!fs.existsSync(absPath)) {
+      return res.status(404).json({
+        error: `APK binary (${fileName}) not found on server.`,
+      });
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return res.sendFile(absPath);
+  });
+
+  app.post('/api/android/github-release', async (req, res) => {
+    const {
+      repo = 'shaikhidayatulla6-web/Jarvis-ai-',
+      token = '',
+      tagName = 'v2.0.0',
+      releaseName = 'J.A.R.V.I.S. 2.0 Android Assistant APK (v2.0.0)',
+    } = (req.body || {}) as {
+      repo?: string;
+      token?: string;
+      tagName?: string;
+      releaseName?: string;
+    };
+
+    const cleanRepo = String(repo || 'shaikhidayatulla6-web/Jarvis-ai-').trim();
+    const cleanToken = String(token || '').trim();
+    const cleanTag = String(tagName || 'v2.0.0').trim();
+
+    if (!cleanToken) {
+      return res.status(400).json({
+        ok: false,
+        status: 'TOKEN_REQUIRED',
+        message: 'Please provide a GitHub Personal Access Token with Contents: Read & Write permission.',
+      });
+    }
+
+    const releaseApkPath = path.join(__dirname, RELEASE_APK_REL);
+    const debugApkPath = path.join(__dirname, DEBUG_APK_REL);
+
+    if (!fs.existsSync(releaseApkPath)) {
+      return res.status(404).json({
+        ok: false,
+        status: 'APK_NOT_FOUND',
+        message: 'Compiled JARVIS-AI-Assistant-v2.0.0.apk was not found on disk.',
+      });
+    }
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${cleanToken}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'JARVIS-APK-Release-Publisher',
+    };
+
+    try {
+      type GithubReleaseInfo = {
+        id: number;
+        html_url: string;
+        upload_url: string;
+        tag_name: string;
+        assets?: Array<{ id: number; name: string; browser_download_url: string }>;
+      };
+      let releaseData: GithubReleaseInfo | null = null;
+
+      const existingResp = await fetch(
+        `https://api.github.com/repos/${cleanRepo}/releases/tags/${encodeURIComponent(cleanTag)}`,
+        { headers }
+      );
+
+      if (existingResp.ok) {
+        releaseData = (await existingResp.json()) as GithubReleaseInfo;
+      } else {
+        const createResp = await fetch(
+          `https://api.github.com/repos/${cleanRepo}/releases`,
+          {
+            method: 'POST',
+            headers: {
+              ...headers,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              tag_name: cleanTag,
+              target_commitish: 'main',
+              name: releaseName,
+              body: [
+                '## J.A.R.V.I.S. 2.0 — Native Android Assistant (Kotlin + Jetpack Compose)',
+                '',
+                '### Included APK Binaries:',
+                '- **`JARVIS-AI-Assistant-v2.0.0.apk`** — Signed Release APK (Android 8.0+ / API 26–35)',
+                '- **`JARVIS-AI-Assistant-Debug.apk`** — Debug APK with full telemetry',
+                '',
+                '### Features:',
+                '- **Google Gemini AI (`gemini-3.8-flash`)** conversational intelligence & native Android tool router (`ASK_AI`, `OPEN_APP`, `OPEN_SETTINGS`, `GET_BATTERY`, `SET_VOLUME`, `CREATE_NOTE`)',
+                '- **Hands-Free "Hey JARVIS" Biometric Voice Match** + **ElevenLabs Voice (`dfsWmmgleAAdssZ0Spld`)**',
+              ].join('\n'),
+              draft: false,
+              prerelease: false,
+            }),
+          }
+        );
+
+        if (!createResp.ok) {
+          const errJson = (await createResp.json().catch(() => ({}))) as {
+            message?: string;
+          };
+          const acceptedPerms = createResp.headers.get('x-accepted-github-permissions') || 'contents=write';
+          return res.status(200).json({
+            ok: false,
+            status: createResp.status === 403 ? 'PERMISSION_DENIED_TOKEN_READ_ONLY' : 'RELEASE_CREATE_FAILED',
+            httpStatus: createResp.status,
+            repo: cleanRepo,
+            requiredPermissions: acceptedPerms,
+            message:
+              createResp.status === 403
+                ? `GitHub returned 403 (${errJson.message || 'Resource not accessible by personal access token'}). Your fine-grained PAT is valid for ${cleanRepo}, but "Contents" permission is currently Read-only. Enable "Contents: Read and write" (and "Workflows: Read and write") in GitHub -> Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens, then click Push APK to Releases again.`
+                : `GitHub API error (HTTP ${createResp.status}): ${errJson.message || 'Unknown error'}`,
+          });
+        }
+
+        releaseData = (await createResp.json()) as GithubReleaseInfo;
+      }
+
+      if (!releaseData || !releaseData.id) {
+        return res.status(200).json({
+          ok: false,
+          status: 'INVALID_RELEASE_RESPONSE',
+          message: 'Could not resolve GitHub Release ID.',
+        });
+      }
+
+      const assetsToUpload = [
+        { name: 'JARVIS-AI-Assistant-v2.0.0.apk', filePath: releaseApkPath },
+        ...(fs.existsSync(debugApkPath)
+          ? [{ name: 'JARVIS-AI-Assistant-Debug.apk', filePath: debugApkPath }]
+          : []),
+      ];
+
+      const uploadedAssets: Array<{ name: string; downloadUrl: string; sizeBytes: number }> = [];
+
+      for (const item of assetsToUpload) {
+        const existingAsset = (releaseData.assets || []).find((a) => a.name === item.name);
+        if (existingAsset) {
+          await fetch(
+            `https://api.github.com/repos/${cleanRepo}/releases/assets/${existingAsset.id}`,
+            { method: 'DELETE', headers }
+          );
+        }
+
+        const fileBuffer = fs.readFileSync(item.filePath);
+        const uploadResp = await fetch(
+          `https://uploads.github.com/repos/${cleanRepo}/releases/${releaseData.id}/assets?name=${encodeURIComponent(item.name)}`,
+          {
+            method: 'POST',
+            headers: {
+              ...headers,
+              'Content-Type': 'application/vnd.android.package-archive',
+              'Content-Length': String(fileBuffer.length),
+            },
+            body: fileBuffer,
+          }
+        );
+
+        if (uploadResp.ok) {
+          const assetJson = (await uploadResp.json()) as {
+            name: string;
+            browser_download_url: string;
+            size: number;
+          };
+          uploadedAssets.push({
+            name: assetJson.name,
+            downloadUrl: assetJson.browser_download_url,
+            sizeBytes: assetJson.size,
+          });
+        }
+      }
+
+      return res.json({
+        ok: true,
+        status: 'RELEASE_PUBLISHED',
+        repo: cleanRepo,
+        tagName: cleanTag,
+        releaseUrl: releaseData.html_url,
+        uploadedAssets,
+        message: `Successfully published ${uploadedAssets.length} APK binary asset(s) to ${releaseData.html_url}`,
+      });
+    } catch (err) {
+      return res.status(200).json({
+        ok: false,
+        status: 'NETWORK_ERROR',
+        message: err instanceof Error ? err.message : 'Failed to connect to GitHub API.',
+      });
+    }
   });
 
   if (process.env.NODE_ENV !== 'production') {

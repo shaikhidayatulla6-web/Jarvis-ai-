@@ -107,6 +107,11 @@ class VoiceAssistantManager(
         }
     }
 
+    fun startPushToTalkListening() {
+        handsFreeEnabled = true
+        startHandsFreeWakeLoop()
+    }
+
     fun startHandsFreeWakeLoop() {
         if (!handsFreeEnabled) return
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -195,16 +200,20 @@ class VoiceAssistantManager(
 
         override fun onResults(results: Bundle?) {
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-            val transcript = matches?.firstOrNull().orEmpty()
+            val transcript = matches?.firstOrNull().orEmpty().trim()
             _voiceState.value = VoiceState.IDLE
 
-            val (wakeDetected, commandText) = VoiceMatchVerifier.extractWakeWord(transcript)
-            if (wakeDetected) {
-                val (verified, score) = VoiceMatchVerifier.verifySpeaker(voiceMatchProfile, 137.0f)
-                if (verified && commandText.isNotBlank()) {
-                    onTranscriptReady(commandText)
-                } else if (!verified) {
-                    _errorMessage.value = "Biometric Voice Match rejected speaker ($score%)."
+            if (transcript.isNotBlank()) {
+                val (wakeDetected, commandText) = VoiceMatchVerifier.extractWakeWord(transcript)
+                if (wakeDetected) {
+                    val (verified, score) = VoiceMatchVerifier.verifySpeaker(voiceMatchProfile, 137.0f)
+                    if (verified && commandText.isNotBlank()) {
+                        onTranscriptReady(commandText)
+                    } else if (!verified) {
+                        _errorMessage.value = "Biometric Voice Match rejected speaker ($score%)."
+                    }
+                } else {
+                    onTranscriptReady(transcript)
                 }
             }
 

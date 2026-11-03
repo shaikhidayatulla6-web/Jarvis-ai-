@@ -4,7 +4,6 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
-    id("com.google.gms.google-services")
 }
 
 android {
@@ -16,11 +15,11 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 2
-        versionName = "2.0.0-dual-provider"
+        versionName = "2.0.0-gemini"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Secure Backend Gateway URL (keeps API Key 1 & API Key 2 in server-side env vars, never inside the APK)
+        // Secure Backend Gateway URL (keeps Gemini API Key in server-side env vars, never inside the APK)
         buildConfigField(
             "String",
             "BACKEND_GATEWAY_URL",
@@ -30,7 +29,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -69,11 +69,6 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
-    // Firebase AI Logic & App Check (Protected Client/Server AI Integration)
-    implementation(platform("com.google.firebase:firebase-bom:33.6.0"))
-    implementation("com.google.firebase:firebase-vertexai")
-    implementation("com.google.firebase:firebase-appcheck-playintegrity")
-
     // Room Local Database & DataStore Preferences
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")
@@ -84,7 +79,7 @@ dependencies {
     // WorkManager for Deferrable Background Scheduling
     implementation("androidx.work:work-runtime-ktx:2.10.0")
 
-    // Coroutines, Serialization & OkHttp for Dual-Provider Secure Gateway Calls
+    // Coroutines, Serialization & OkHttp for Google Gemini AI Gateway Calls
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -93,3 +88,4 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
+
